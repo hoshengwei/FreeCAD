@@ -185,6 +185,7 @@ class BIMWorkbench(Workbench):
             "BIM_Setup",
             "BIM_Views",
             "BIM_ProjectManager",
+            "BIM_StoreyManager",
             "BIM_Windows",
             "BIM_IfcElements",
             "BIM_IfcQuantities",

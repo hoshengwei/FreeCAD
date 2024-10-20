@@ -149,6 +149,7 @@ SET(bimcommands_SRCS
     bimcommands/BimSlab.py
     bimcommands/BimSpace.py
     bimcommands/BimStairs.py
+    bimcommands/BimStoreyManager.py
     bimcommands/BimTDPage.py
     bimcommands/BimTDView.py
     bimcommands/BimText.py
