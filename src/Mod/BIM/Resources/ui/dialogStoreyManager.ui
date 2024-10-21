@@ -34,7 +34,10 @@
       <set>QAbstractItemView::EditTrigger::DoubleClicked</set>
      </property>
      <property name="dragEnabled">
-      <bool>true</bool>
+      <bool>false</bool>
+     </property>
+     <property name="rootIsDecorated">
+      <bool>false</bool>
      </property>
      <column>
       <property name="text">
