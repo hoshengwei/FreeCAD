@@ -31,6 +31,8 @@ import FreeCADGui
 QT_TRANSLATE_NOOP = FreeCAD.Qt.QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
+MODIFIED_COLOR = "yellow"
+
 
 class BIM_StoreyManager:
     def GetResources(self):
@@ -193,6 +195,7 @@ class BIM_StoreyManager:
     def make_new_story_item(self):
         from PySide import QtGui
 
+        # not make instance until click apply button, here should only update tree view
         # new_storey = Arch.makeFloor()
         new_storey_item = QtGui.QTreeWidgetItem(
             [
@@ -209,6 +212,7 @@ class BIM_StoreyManager:
 
         selected_storey_item = self.dialog.tree.currentItem()
         new_storey_item = self.make_new_story_item()
+        self.highlight_item(new_storey_item)
 
         if selected_storey_item:
             index = self.dialog.tree.indexOfTopLevelItem(selected_storey_item)
@@ -233,6 +237,19 @@ class BIM_StoreyManager:
                 self.dialog.tree.addTopLevelItem(new_storey_item)
 
         self.modified_stories.append(new_storey_item)
+
+    def highlight_item(self, item, column=None, bg_color=MODIFIED_COLOR):
+        """column could be None, col_index, [col_index, col_index,...]"""
+        from PySide import QtGui
+
+        if column:
+            column = [column] if not isinstance(column, (list, tuple)) else column
+            for i in column:
+                item.setBackground(i, QtGui.QBrush(QtGui.QColor(bg_color)))
+        else:  # changed entire item color
+            column_count = self.dialog.tree.columnCount()
+            for column in range(column_count):
+                item.setBackground(column, QtGui.QBrush(QtGui.QColor(bg_color)))
 
 
 def get_elevation(obj):
