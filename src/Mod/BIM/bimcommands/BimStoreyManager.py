@@ -48,7 +48,8 @@ class BIM_StoreyManager:
         return v
 
     def Activated(self):
-        self.stories = []
+        self.stories = []  # for the stories already exist in the building
+        self.modified_stories = []  # to collect the modified stories
 
         # load the dialog and set the tree model up
         self.dialog = FreeCADGui.PySideUic.loadUi(":/ui/dialogStoreyManager.ui")
@@ -106,10 +107,10 @@ class BIM_StoreyManager:
         self.dialog.tree.expandAll()
 
     def insert_above(self):
-        self.update()
+        self.insert_storey_item("above")
 
     def insert_below(self):
-        self.update()
+        self.insert_storey_item("below")
 
     def mezzanine(self):
         self.update()
@@ -124,9 +125,10 @@ class BIM_StoreyManager:
         print("Accept", self.stories)
 
     def get_buildings(self):
+        """fill the building combobox"""
         from PySide import QtGui
 
-        # fill the building combobox
+        # for collecting all the building in the document
         self.buildings = []
         for obj in FreeCAD.ActiveDocument.Objects:
             if (
@@ -149,10 +151,6 @@ class BIM_StoreyManager:
                 else 0
             )
             self.dialog.comboBuilding.setCurrentIndex(index)
-
-        # # assign manage building
-        # if self.buildings:
-        #     self.building = self.buildings[index]
 
     def getTreeViewItems(self):
         from PySide import QtGui
@@ -192,6 +190,50 @@ class BIM_StoreyManager:
 
             self.dialog.tree.addTopLevelItem(storey_item)
 
+    def make_new_story_item(self):
+        from PySide import QtGui
+
+        # new_storey = Arch.makeFloor()
+        new_storey_item = QtGui.QTreeWidgetItem(
+            [
+                "New Level",
+                FreeCAD.Units.Quantity(0, FreeCAD.Units.Length).UserString,
+                FreeCAD.Units.Quantity(0, FreeCAD.Units.Length).UserString,
+            ]
+        )
+        new_storey_item.setIcon(0, QtGui.QIcon(":/icons/Arch_Floor_Tree.svg"))
+        return new_storey_item
+
+    def insert_storey_item(self, position):
+        """Insert storey can choose insert above or below"""
+
+        selected_storey_item = self.dialog.tree.currentItem()
+        new_storey_item = self.make_new_story_item()
+
+        if selected_storey_item:
+            index = self.dialog.tree.indexOfTopLevelItem(selected_storey_item)
+            if index != -1:
+                if position == "above":
+                    self.dialog.tree.insertTopLevelItem(index, new_storey_item)
+                elif position == "below":
+                    self.dialog.tree.insertTopLevelItem(index + 1, new_storey_item)
+            else:
+                # mezzanine_storey
+                parent_storey_item = selected_storey_item.parent()
+                if parent_storey_item:
+                    index = parent_storey_item.indexOfChild(selected_storey_item)
+                    if position == "above":
+                        parent_storey_item.insertChild(index, new_storey_item)
+                    elif position == "below":
+                        parent_storey_item.insertChild(index + 1, new_storey_item)
+        else:  # if not select any storey
+            if position == "above":
+                self.dialog.tree.insertTopLevelItem(0, new_storey_item)
+            elif position == "below":
+                self.dialog.tree.addTopLevelItem(new_storey_item)
+
+        self.modified_stories.append(new_storey_item)
+
 
 def get_elevation(obj):
     """return z: float"""
@@ -202,37 +244,6 @@ def get_elevation(obj):
         if hasattr(obj, "Elevation"):
             z = obj.Elevation.Value
     return z
-
-
-# def getTreeViewItem(obj):
-#     """
-#     from FreeCAD object make the TreeWidgetItem including icon Label and LevelHeight
-#     and also make a level height in number to sort the order after
-#     """
-#     from PySide import QtCore, QtGui
-#
-#     z = FreeCAD.Units.Quantity(obj.Placement.Base.z, FreeCAD.Units.Length)
-#     h = ""
-#     if hasattr(obj, "Height"):
-#         h = FreeCAD.Units.Quantity(obj.Height, FreeCAD.Units.Length).UserString
-#     lvHStr = z.UserString
-#     if z.Value == 0:
-#         # override with Elevation property if available
-#         if hasattr(obj, "Elevation"):
-#             z = FreeCAD.Units.Quantity(obj.Elevation, FreeCAD.Units.Length)
-#             lvHStr = z.UserString
-#     lvH = z.Value
-#     it = QtGui.QTreeWidgetItem([obj.Label, h, lvHStr])
-#     it.setFlags(it.flags() | QtCore.Qt.ItemIsEditable)
-#     it.setToolTip(0, obj.Name)
-#     it.setToolTip(1, "Double-Click or Press F2 to edit")
-#     it.setToolTip(2, "Double-Click or Press F2 to edit")
-#     if obj.ViewObject:
-#         if hasattr(obj.ViewObject, "Proxy") and hasattr(
-#             obj.ViewObject.Proxy, "getIcon"
-#         ):
-#             it.setIcon(0, QtGui.QIcon(obj.ViewObject.Proxy.getIcon()))
-#     return (it, lvH)
 
 
 FreeCADGui.addCommand("BIM_StoreyManager", BIM_StoreyManager())
