@@ -50,8 +50,10 @@ class BIM_StoreyManager:
         return v
 
     def Activated(self):
+        from PySide.QtWidgets import QTreeWidget, QAbstractItemView
+
         self.stories = []  # for the stories already exist in the building
-        self.modified_stories = []  # to collect the modified stories
+        self.temp_stories = []  # tree view stories holder
 
         # load the dialog and set the tree model up
         self.dialog = FreeCADGui.PySideUic.loadUi(":/ui/dialogStoreyManager.ui")
@@ -70,18 +72,24 @@ class BIM_StoreyManager:
         self.dialog.buttonMezzanine.clicked.connect(self.mezzanine)
         self.dialog.buttonDelete.clicked.connect(self.delete_storey)
         self.dialog.comboBuilding.currentIndexChanged.connect(self.update)
-        self.dialog.buttonBox.accepted.connect(self.accept)
+        self.dialog.buttonBox.accepted.connect(self.apply_changes)
+        self.dialog.tree.itemChanged.connect(self.item_changed)
+
+        # # tree setting
+        # self.dialog.tree.setSelectionMode(QTreeWidget.SingleSelection)
+        # self.dialog.tree.setEditTriggers(QTreeWidget.AllEditTriggers)
 
         self.dialog.show()
         self.get_buildings()
 
     def update(self):
         self.stories.clear()
+        self.temp_stories.clear()
         self.dialog.tree.clear()
         # Load every existing storeys belongs to the building
-        building = self.dialog.comboBuilding.currentData()
+        self.building = self.dialog.comboBuilding.currentData()
         stories = []
-        for storey in building.OutList:
+        for storey in self.building.OutList:
             if (
                 getattr(storey, "IfcType", None) == "Building Storey"
                 or getattr(storey, "IfcClass", None) == "IfcBuildingStorey"
@@ -95,14 +103,11 @@ class BIM_StoreyManager:
                         == "IfcBuildingStorey"
                     ):
                         sub_stories.append(mezzanine_storey)
+                # storey data format
                 stories.append((storey, sub_stories))
                 sorted_stories = sorted(
                     stories, key=lambda x: get_elevation(x[0]), reverse=True
                 )
-                # print(sorted_stories)
-                # for story in sorted_stories:
-                #     print(story[0].Label)
-                #     print(get_elevation(story[0]))
                 self.stories = sorted_stories
         # fill the tree with QTreeWidgetItem
         self.getTreeViewItems()
@@ -114,17 +119,13 @@ class BIM_StoreyManager:
     def insert_below(self):
         self.insert_storey_item("below")
 
-    def mezzanine(self):
-        self.update()
-
     def delete_storey(self):
-        self.update()
+        # TODO: 需要先確認該樓層是否底下還有其他物件才允許刪除
+        pass
 
-    # def selected_building_changed(self):
-    #     self.update()
-
-    def accept(self):
-        print("Accept", self.stories)
+    # def accept(self):
+    #     print("Accept", self.stories)
+    #     print(self.temp_stories)
 
     def get_buildings(self):
         """fill the building combobox"""
@@ -155,7 +156,7 @@ class BIM_StoreyManager:
             self.dialog.comboBuilding.setCurrentIndex(index)
 
     def getTreeViewItems(self):
-        from PySide import QtGui
+        from PySide import QtGui, QtCore
 
         for i in range(len(self.stories)):
             storey = self.stories[i][0]
@@ -174,6 +175,8 @@ class BIM_StoreyManager:
 
             storey_item = QtGui.QTreeWidgetItem([storey.Label, z_user_str, h_user_str])
             storey_item.setIcon(0, QtGui.QIcon(storey.ViewObject.Proxy.getIcon()))
+            storey_item.setFlags(storey_item.flags() | QtCore.Qt.ItemIsEditable)
+            self.temp_stories.append((storey_item, storey, []))
 
             # deal with mezzanine_storey if have
             if mezzanine_stories:
@@ -188,12 +191,17 @@ class BIM_StoreyManager:
                     mezz_storey_item.setIcon(
                         0, QtGui.QIcon(mezz_storey.ViewObject.Proxy.getIcon())
                     )
+                    mezz_storey_item.setFlags(
+                        mezz_storey_item.flags() | QtCore.Qt.ItemIsEditable
+                    )
                     storey_item.addChild(mezz_storey_item)
+                    self.temp_stories[-1][2].append((mezz_storey_item, mezz_storey))
 
             self.dialog.tree.addTopLevelItem(storey_item)
+            # self.temp_stories.append(storey_item)
 
     def make_new_story_item(self):
-        from PySide import QtGui
+        from PySide import QtGui, QtCore
 
         # not make instance until click apply button, here should only update tree view
         # new_storey = Arch.makeFloor()
@@ -205,6 +213,7 @@ class BIM_StoreyManager:
             ]
         )
         new_storey_item.setIcon(0, QtGui.QIcon(":/icons/Arch_Floor_Tree.svg"))
+        new_storey_item.setFlags(new_storey_item.flags() | QtCore.Qt.ItemIsEditable)
         return new_storey_item
 
     def insert_storey_item(self, position):
@@ -213,6 +222,7 @@ class BIM_StoreyManager:
         selected_storey_item = self.dialog.tree.currentItem()
         new_storey_item = self.make_new_story_item()
         self.highlight_item(new_storey_item)
+        self.temp_stories.append((new_storey_item, None, None))
 
         if selected_storey_item:
             index = self.dialog.tree.indexOfTopLevelItem(selected_storey_item)
@@ -236,7 +246,8 @@ class BIM_StoreyManager:
             elif position == "below":
                 self.dialog.tree.addTopLevelItem(new_storey_item)
 
-        self.modified_stories.append(new_storey_item)
+    def mezzanine(self):
+        pass
 
     def highlight_item(self, item, column=None, bg_color=MODIFIED_COLOR):
         """column could be None, col_index, [col_index, col_index,...]"""
@@ -250,6 +261,57 @@ class BIM_StoreyManager:
             column_count = self.dialog.tree.columnCount()
             for column in range(column_count):
                 item.setBackground(column, QtGui.QBrush(QtGui.QColor(bg_color)))
+
+    def item_changed(self, item, column):
+        "renames or edit height or edit elevation of the object"
+        self.highlight_item(item)
+        # if column == 0:
+        #     obj.Label = item.text(column)
+        # if column == 1:
+        #     obj.Placement.Base.z = FreeCAD.Units.parseQuantity(item.text(column))
+        #
+        # new_elevation, ok = self.get_input("Edit Elevation", "Enter new elevation:", item.text(1))
+        # if ok:
+        #     item.setText(1, new_elevation)
+        #     if item not in self.modified_items:
+
+    def apply_changes(self):
+        import Arch
+
+        for s, _ in self.stories:
+            print("exist", s.Label)
+        # compare the storey in tree and exist storey
+        print(len(self.temp_stories))
+        print(self.temp_stories)
+
+        for temp_storey_item, temp_storey, temp_mezz_stories in self.temp_stories:
+            print("temp", temp_storey)
+            # if not exist -> create new storey
+            if temp_storey is None:
+                print(temp_storey_item.text(1))
+                print(type(temp_storey_item.text(1)))
+
+                new_storey = Arch.makeFloor()
+                new_storey.Label = temp_storey_item.text(0)
+                new_storey.Placement.Base.z = FreeCAD.Units.parseQuantity(
+                    temp_storey_item.text(1)
+                )
+                new_storey.Elevation = new_storey.Placement.Base.z
+                self.building.addObject(new_storey)
+
+                # # 更新子 story
+                # for child_item, sub_story in sub_items:
+                #     sub_story['name'] = child_item.text(0)
+                #     sub_story['elevation'] = float(child_item.text(1))
+                #     sub_story['height'] = float(child_item.text(2))
+
+        # self.accept()  # 關閉對話框
+
+    def get_storey_item(self, storey_item=None):
+        for s_item, _ in self.stories:
+            if s_item == storey_item:
+                return s_item
+        return None
 
 
 def get_elevation(obj):
